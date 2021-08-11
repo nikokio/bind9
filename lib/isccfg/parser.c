@@ -19,6 +19,7 @@
 #include <isc/buffer.h>
 #include <isc/dir.h>
 #include <isc/formatcheck.h>
+#include <isc/glob.h>
 #include <isc/lex.h>
 #include <isc/log.h>
 #include <isc/mem.h>
@@ -2392,9 +2393,21 @@ cfg_parse_mapbody(cfg_parser_t *pctx, const cfg_type_t *type, cfg_obj_t **ret) {
 			CHECK(cfg_parse_obj(pctx, &cfg_type_qstring,
 					    &includename));
 			CHECK(parse_semicolon(pctx));
-			CHECK(parser_openfile(pctx,
-					      includename->value.string.base));
+
+			/* Allow include to specify a pattern that follows
+			 * the same rules as the shell e.g "/path/zone*.conf" */
+			glob_t glob_obj;
+			CHECK(isc_glob(includename->value.string.base,
+				       &glob_obj));
 			cfg_obj_destroy(pctx, &includename);
+
+			for (size_t i = 0; i < glob_obj.gl_pathc; ++i) {
+				CHECK(parser_openfile(pctx,
+						      glob_obj.gl_pathv[i]));
+			}
+
+			isc_globfree(&glob_obj);
+
 			goto redo;
 		}
 
